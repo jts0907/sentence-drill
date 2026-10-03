@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="문장암기">
 <meta name="theme-color" content="#1f2a44">
 <title>문장 암기</title>
@@ -305,18 +304,35 @@ const play = (it, mul) => speak(sayText(it), it.lang, mul);
 
 // ---------- 음성 인식 ----------
 const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+// iOS 홈 화면 앱(standalone)에서는 음성 인식이 응답 없이 멈추므로 막는다
+const STANDALONE = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+let activeRec = null;
+function stopListening() {
+  if (activeRec) { activeRec.finish(new Error('중지됨')); activeRec = null; }
+}
 function listen(lang) {
   return new Promise((resolve, reject) => {
     if (!Rec) return reject(new Error('이 브라우저는 음성 인식을 지원하지 않습니다'));
+    if (STANDALONE) return reject(new Error('홈 화면 앱에서는 iOS가 음성 인식을 막습니다. Safari에서 열어 주세요'));
+    stopListening();
     if (synth) synth.cancel();
     const r = new Rec();
     r.lang = lang === 'ja' ? 'ja-JP' : 'en-US';
     r.interimResults = false; r.continuous = false; r.maxAlternatives = 3;
-    let done = false;
-    r.onresult = e => { done = true; resolve(Array.from(e.results[0]).map(a => a.transcript)); };
-    r.onerror = e => { done = true; reject(new Error(e.error)); };
-    r.onend = () => { if (!done) resolve([]); };
-    r.start();
+    let done = false, timer;
+    const finish = (err, alts) => {
+      if (done) return; done = true; clearTimeout(timer);
+      try { r.abort(); } catch {}
+      if (activeRec && activeRec.r === r) activeRec = null;
+      err ? reject(err) : resolve(alts || []);
+    };
+    activeRec = { r, finish };
+    r.onresult = e => finish(null, Array.from(e.results[0]).map(a => a.transcript));
+    r.onerror = e => finish(new Error(e.error));
+    r.onend = () => finish(null, []);
+    // 응답이 없으면 10초 뒤 강제로 끝낸다
+    timer = setTimeout(() => finish(new Error('응답 없음 (10초)')), 10000);
+    try { r.start(); } catch (err) { finish(err); }
   });
 }
 function lcs(a, b) {
@@ -417,7 +433,7 @@ function renderReview() {
     <div class="row" style="margin-top:12px">
       <button class="grow" data-a="play">듣기</button>
       <button class="grow" data-a="slow">느리게</button>
-      <button class="grow" data-a="rec" ${Rec ? '' : 'disabled'}>말해 보기</button>
+      <button class="grow" data-a="rec" ${Rec ? '' : 'disabled'}>${STANDALONE ? '말해 보기 (Safari 전용)' : '말해 보기'}</button>
     </div>
     ${session.revealed
       ? `<div class="grades">${GRADES.map((g, i) => `<button class="g${i}" data-g="${i}">${g[0]}<small>${preview(it, i)}</small></button>`).join('')}</div>`
@@ -428,7 +444,8 @@ function renderReview() {
     if (b.dataset.a === 'slow') play(it, 0.7);
     if (b.dataset.a === 'reveal') { session.revealed = true; renderReview(); play(it); }
     if (b.dataset.a === 'rec') {
-      b.textContent = '듣는 중...'; b.disabled = true;
+      if (activeRec) { stopListening(); return; }
+      b.textContent = '듣는 중 (눌러서 멈춤)';
       try {
         const alts = await listen(it.lang);
         const targets = [it.text, it.reading].filter(Boolean);
@@ -624,6 +641,7 @@ const views = ['review', 'shadow', 'list', 'add', 'set'];
 function show(v) {
   views.forEach(x => $('#v-' + x).classList.toggle('hidden', x !== v));
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  stopListening();
   if (v !== 'shadow') { shRun++; if (synth) synth.cancel(); }
   if (v === 'review') { session = null; renderReview(); }
   if (v === 'list') renderList();
