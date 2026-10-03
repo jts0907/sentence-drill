@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="문장암기">
+<meta name="theme-color" content="#1f2a44">
+<title>문장 암기</title>
+<style>
+:root {
+  --bg: #f6f6f3; --card: #ffffff; --text: #1d2433; --muted: #6b7280;
+  --line: #e3e3de; --accent: #2f5bd3; --accent-ink: #ffffff;
+  --again: #c2410c; --hard: #b45309; --good: #15803d; --easy: #2f5bd3;
+  --soft: #eef2fb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151c; --card: #1b2029; --text: #e7e9ee; --muted: #9aa3b2;
+    --line: #2b3240; --accent: #6d8ff0; --accent-ink: #0d1020;
+    --again: #f08a5d; --hard: #e9b04f; --good: #5cc98a; --easy: #6d8ff0;
+    --soft: #222a3a;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Hiragino Sans", "Noto Sans KR", sans-serif;
+  font-size: 16px; line-height: 1.5;
+  padding: env(safe-area-inset-top) 0 calc(72px + env(safe-area-inset-bottom));
+}
+main { max-width: 640px; margin: 0 auto; padding: 12px 16px; }
+h2 { font-size: 18px; margin: 8px 0 12px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.grow { flex: 1; }
+button, select, input, textarea {
+  font: inherit; color: inherit; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--card); padding: 10px 12px;
+}
+button { cursor: pointer; min-height: 44px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.ghost { background: transparent; }
+button:disabled { opacity: .45; }
+input, textarea, select { width: 100%; }
+textarea { min-height: 120px; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; flex: 1; background: var(--card); }
+.seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.muted { color: var(--muted); font-size: 14px; }
+.big { font-size: 22px; line-height: 1.45; font-weight: 600; word-break: keep-all; }
+.ja { font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; }
+.reading { color: var(--muted); font-size: 16px; margin-top: 4px; }
+.prompt { min-height: 96px; display: flex; flex-direction: column; justify-content: center; }
+.grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
+.grades button { font-weight: 600; padding: 8px 4px; }
+.grades small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); }
+.g0 { color: var(--again); } .g1 { color: var(--hard); } .g2 { color: var(--good); } .g3 { color: var(--easy); }
+.score { margin-top: 10px; padding: 10px 12px; background: var(--soft); border-radius: 10px; font-size: 15px; }
+.item { display: flex; gap: 8px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--line); }
+.item:first-child { border-top: 0; }
+.item .t { font-weight: 600; word-break: keep-all; }
+.item button { min-height: 36px; padding: 6px 10px; }
+.tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 6px; background: var(--soft); color: var(--muted); margin-right: 4px; }
+nav {
+  position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line);
+  display: flex; padding-bottom: env(safe-area-inset-bottom);
+}
+nav button { flex: 1; border: 0; border-radius: 0; background: transparent; min-height: 60px; font-size: 13px; color: var(--muted); }
+nav button.on { color: var(--accent); font-weight: 700; }
+.hidden { display: none !important; }
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(80px + env(safe-area-inset-bottom));
+  background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 10px; font-size: 14px;
+  opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90%;
+}
+.toast.show { opacity: .92; }
+.stat { display: flex; gap: 16px; }
+.stat b { font-size: 22px; display: block; }
+input[type=range] { padding: 0; }
+input[type=checkbox] { width: auto; }
+</style>
+</head>
+<body>
+<main>
+
+<!-- 복습 -->
+<section id="v-review">
+  <div class="row" style="margin-bottom:12px">
+    <div class="seg grow" id="langSeg">
+      <button data-lang="all">전체</button><button data-lang="en">영어</button><button data-lang="ja">日本語</button>
+    </div>
+  </div>
+  <div class="row" style="margin-bottom:12px">
+    <div class="seg grow" id="modeSeg">
+      <button data-mode="recall">한국어 보고 말하기</button><button data-mode="listen">듣고 맞히기</button>
+    </div>
+  </div>
+  <div class="card stat" id="stats"></div>
+  <div class="card" id="reviewCard"></div>
+</section>
+
+<!-- 쉐도잉 -->
+<section id="v-shadow" class="hidden">
+  <h2>쉐도잉</h2>
+  <div class="card">
+    <label>언어</label>
+    <div class="seg" id="shLangSeg"><button data-lang="en">영어</button><button data-lang="ja">日本語</button></div>
+    <label>범위</label>
+    <select id="shScope"><option value="due">오늘 복습할 문장</option><option value="all">전체 문장</option><option value="recent">최근 추가 20개</option></select>
+    <label>문장당 반복 횟수</label>
+    <select id="shRepeat"><option>1</option><option selected>2</option><option>3</option></select>
+    <label><input type="checkbox" id="shMeaning" checked> 뜻 먼저 보여주기</label>
+    <div class="row" style="margin-top:12px">
+      <button class="primary grow" id="shStart">시작</button>
+      <button class="grow" id="shStop" disabled>정지</button>
+    </div>
+  </div>
+  <div class="card prompt" id="shNow"><span class="muted">문장을 재생한 뒤 같은 길이만큼 쉬어 줍니다. 그 사이에 따라 말하세요.</span></div>
+</section>
+
+<!-- 목록 -->
+<section id="v-list" class="hidden">
+  <div class="row" style="margin-bottom:12px">
+    <input id="q" class="grow" placeholder="검색" style="width:auto">
+    <select id="listLang" style="width:auto"><option value="all">전체</option><option value="en">영어</option><option value="ja">日本語</option></select>
+  </div>
+  <div class="card" id="list"></div>
+</section>
+
+<!-- 추가 -->
+<section id="v-add" class="hidden">
+  <h2 id="addTitle">문장 추가</h2>
+  <div class="card">
+    <input type="hidden" id="fId">
+    <label>언어</label>
+    <div class="seg" id="fLangSeg"><button data-lang="en">영어</button><button data-lang="ja">日本語</button></div>
+    <label>문장</label>
+    <textarea id="fText" style="min-height:70px"></textarea>
+    <label id="fReadingLabel">읽기 (히라가나, 일본어만)</label>
+    <textarea id="fReading" style="min-height:60px" placeholder="예: きょうはとてもあついですね。"></textarea>
+    <label>뜻 (한국어)</label>
+    <input id="fMeaning">
+    <label>메모 (문법, 표현 설명)</label>
+    <input id="fNote">
+    <label>태그 (쉼표로 구분)</label>
+    <input id="fTags" placeholder="여행, 식당">
+    <div class="row" style="margin-top:12px">
+      <button class="ghost" id="fPlay">발음 듣기</button>
+      <button class="ghost hidden" id="fCancel">취소</button>
+      <button class="primary grow" id="fSave">저장</button>
+    </div>
+  </div>
+  <h2>한꺼번에 붙여넣기</h2>
+  <div class="card">
+    <p class="muted" style="margin-top:0">한 줄에 한 문장. 칸은 탭 또는 <b>|</b> 로 구분합니다.<br>
+      영어: <code>문장 | 뜻 | 메모</code><br>
+      일본어: <code>문장 | 읽기 | 뜻 | 메모</code></p>
+    <div class="seg" id="bLangSeg"><button data-lang="en">영어</button><button data-lang="ja">日本語</button></div>
+    <label>내용</label>
+    <textarea id="bText" placeholder="Could you say that again? | 다시 말해 줄래요?"></textarea>
+    <button class="primary" id="bSave" style="width:100%;margin-top:10px">가져오기</button>
+  </div>
+</section>
+
+<!-- 설정 -->
+<section id="v-set" class="hidden">
+  <h2>음성</h2>
+  <div class="card">
+    <label>영어 목소리</label><select id="vEn"></select>
+    <label>영어 속도 <span id="rEnV"></span></label><input type="range" id="rEn" min="0.5" max="1.2" step="0.05">
+    <label>일본어 목소리</label><select id="vJa"></select>
+    <label>일본어 속도 <span id="rJaV"></span></label><input type="range" id="rJa" min="0.5" max="1.2" step="0.05">
+    <label><input type="checkbox" id="useReading"> 일본어는 '읽기' 칸으로 발음 (한자 오독 방지)</label>
+    <div class="row" style="margin-top:12px">
+      <button class="grow" id="testEn">영어 테스트</button><button class="grow" id="testJa">일본어 테스트</button>
+    </div>
+    <p class="muted">목소리가 어색하면 iPhone 설정 &gt; 손쉬운 사용 &gt; 읽기 및 말하기 &gt; 음성에서 '향상된 음질' 음성을 내려받은 뒤 앱을 다시 여세요.</p>
+  </div>
+  <h2>구글시트 연결</h2>
+  <div class="card">
+    <p class="muted" style="margin-top:0">비워 두면 이 기기 브라우저에만 저장됩니다. 연결하면 폰과 컴퓨터가 같은 문장을 씁니다.</p>
+    <label>Apps Script 웹 앱 URL</label><input id="sUrl" placeholder="https://script.google.com/macros/s/.../exec">
+    <label>토큰</label><input id="sToken">
+    <div class="row" style="margin-top:12px">
+      <button class="primary grow" id="sSave">저장 후 동기화</button>
+    </div>
+    <p class="muted" id="syncInfo"></p>
+  </div>
+  <h2>데이터</h2>
+  <div class="card row">
+    <button class="grow" id="exportBtn">백업 파일 받기</button>
+    <button class="grow" id="sampleBtn">예문 넣기</button>
+  </div>
+</section>
+
+</main>
+
+<nav id="nav">
+  <button data-v="review" class="on">복습</button>
+  <button data-v="shadow">쉐도잉</button>
+  <button data-v="list">목록</button>
+  <button data-v="add">추가</button>
+  <button data-v="set">설정</button>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+'use strict';
+
+// ---------- 저장소 ----------
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem('sa.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('sa.' + k, JSON.stringify(v)); } catch {} },
+};
+const S = Object.assign({
+  url: '', token: '', lang: 'all', mode: 'recall',
+  voice: { en: '', ja: '' }, rate: { en: 0.8, ja: 0.75 }, useReading: true,
+}, LS.get('settings', {}));
+const saveSettings = () => LS.set('settings', S);
+
+let items = LS.get('items', []);
+let queue = LS.get('queue', { upsert: {}, del: [] });
+const saveLocal = () => { LS.set('items', items); LS.set('queue', queue); };
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const today = (add = 0) => {
+  const d = new Date(); d.setDate(d.getDate() + add);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+};
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const toast = msg => { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 1800); };
+
+// ---------- 동기화 ----------
+async function api(body) {
+  const res = await fetch(S.url, { method: 'POST', body: JSON.stringify(Object.assign({ token: S.token }, body)) });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || 'error');
+  return j;
+}
+async function flush() {
+  if (!S.url) return;
+  const ups = Object.values(queue.upsert);
+  if (ups.length) { await api({ action: 'upsert', items: ups }); queue.upsert = {}; }
+  if (queue.del.length) { await api({ action: 'delete', ids: queue.del }); queue.del = []; }
+  saveLocal();
+}
+async function sync(showMsg) {
+  if (!S.url) return;
+  try {
+    await flush();
+    const j = await api({ action: 'list' });
+    items = j.items; saveLocal(); renderAll();
+    $('#syncInfo').textContent = '마지막 동기화: ' + new Date().toLocaleString();
+    if (showMsg) toast('동기화 완료 (' + items.length + '개)');
+  } catch (e) {
+    $('#syncInfo').textContent = '동기화 실패: ' + e.message;
+    if (showMsg) toast('동기화 실패: ' + e.message);
+  }
+}
+function put(it) {
+  const i = items.findIndex(x => x.id === it.id);
+  if (i >= 0) items[i] = it; else items.push(it);
+  queue.upsert[it.id] = it; saveLocal();
+  flush().catch(() => {});
+}
+function del(id) {
+  items = items.filter(x => x.id !== id);
+  delete queue.upsert[id]; queue.del.push(id); saveLocal();
+  flush().catch(() => {});
+}
+
+// ---------- 음성 출력 ----------
+const synth = window.speechSynthesis;
+let voices = [];
+function loadVoices() {
+  voices = synth ? synth.getVoices() : [];
+  for (const [lang, sel] of [['en', '#vEn'], ['ja', '#vJa']]) {
+    const list = voices.filter(v => v.lang.toLowerCase().startsWith(lang));
+    $(sel).innerHTML = '<option value="">기본</option>' + list.map(v =>
+      `<option value="${esc(v.voiceURI)}" ${v.voiceURI === S.voice[lang] ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('');
+  }
+}
+if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
+
+function speak(text, lang, rateMul = 1) {
+  return new Promise(resolve => {
+    if (!synth) { toast('이 브라우저는 음성 출력을 지원하지 않습니다'); return resolve(); }
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang === 'ja' ? 'ja-JP' : 'en-US';
+    const v = voices.find(v => v.voiceURI === S.voice[lang]);
+    if (v) u.voice = v;
+    u.rate = (S.rate[lang] || 1) * rateMul;
+    u.onend = u.onerror = () => resolve();
+    // iOS에서 cancel 직후 바로 speak 하면 무시되는 경우가 있어 약간 늦춘다
+    setTimeout(() => synth.speak(u), 60);
+  });
+}
+const sayText = it => (it.lang === 'ja' && S.useReading && it.reading) ? it.reading : it.text;
+const play = (it, mul) => speak(sayText(it), it.lang, mul);
+
+// ---------- 음성 인식 ----------
+const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+function listen(lang) {
+  return new Promise((resolve, reject) => {
+    if (!Rec) return reject(new Error('이 브라우저는 음성 인식을 지원하지 않습니다'));
+    if (synth) synth.cancel();
+    const r = new Rec();
+    r.lang = lang === 'ja' ? 'ja-JP' : 'en-US';
+    r.interimResults = false; r.continuous = false; r.maxAlternatives = 3;
+    let done = false;
+    r.onresult = e => { done = true; resolve(Array.from(e.results[0]).map(a => a.transcript)); };
+    r.onerror = e => { done = true; reject(new Error(e.error)); };
+    r.onend = () => { if (!done) resolve([]); };
+    r.start();
+  });
+}
+function lcs(a, b) {
+  const dp = Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = 0;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prev + 1 : Math.max(dp[j], dp[j - 1]);
+      prev = tmp;
+    }
+  }
+  return dp[b.length];
+}
+function similarity(target, said, lang) {
+  const norm = s => s.toLowerCase().replace(/[’']/g, "'").replace(/[.,!?;:"“”、。！？「」（）()\-]/g, ' ');
+  const tok = s => lang === 'ja' ? norm(s).replace(/\s+/g, '').split('') : norm(s).split(/\s+/).filter(Boolean);
+  const a = tok(target), b = tok(said);
+  if (!a.length || !b.length) return 0;
+  return Math.round(200 * lcs(a, b) / (a.length + b.length));
+}
+
+// ---------- 간격 반복 ----------
+const GRADES = [['다시', '오늘 다시'], ['어려움', ''], ['보통', ''], ['쉬움', '']];
+function schedule(it, g) {
+  let ease = Number(it.ease) || 2.5, iv = Number(it.interval) || 0, reps = Number(it.reps) || 0;
+  if (g === 0) { reps = 0; iv = 0; ease = Math.max(1.3, ease - 0.2); }
+  else {
+    if (g === 1) ease -= 0.15; if (g === 3) ease += 0.15;
+    ease = Math.max(1.3, ease);
+    if (reps === 0) iv = g === 3 ? 3 : 1;
+    else if (reps === 1) iv = g === 1 ? 2 : g === 2 ? 3 : 5;
+    else iv = Math.round(iv * (g === 1 ? 1.2 : g === 2 ? ease : ease * 1.3));
+    iv = Math.max(1, iv); reps++;
+  }
+  return Object.assign({}, it, { ease: +ease.toFixed(2), interval: iv, reps, due: today(iv), lastReviewed: today() });
+}
+function preview(it, g) {
+  const iv = schedule(it, g).interval;
+  return g === 0 ? '오늘 다시' : iv + '일 뒤';
+}
+
+// ---------- 복습 화면 ----------
+let session = null;
+const inLang = (it, l) => l === 'all' || it.lang === l;
+function dueList() {
+  const t = today();
+  return items.filter(it => inLang(it, S.lang) && (!it.due || it.due <= t))
+    .sort((a, b) => (a.due || '').localeCompare(b.due || ''));
+}
+function startSession() { session = { q: dueList().map(x => x.id), done: 0, revealed: false, said: null }; }
+
+function renderStats() {
+  const t = today(), pool = items.filter(it => inLang(it, S.lang));
+  const due = pool.filter(it => !it.due || it.due <= t).length;
+  const learned = pool.filter(it => Number(it.reps) >= 3).length;
+  $('#stats').innerHTML = `<div><b>${due}</b><span class="muted">오늘 복습</span></div>
+    <div><b>${session ? session.done : 0}</b><span class="muted">완료</span></div>
+    <div><b>${learned}/${pool.length}</b><span class="muted">익힌 문장</span></div>`;
+}
+
+function renderReview() {
+  if (!session) startSession();
+  renderStats();
+  const box = $('#reviewCard');
+  const id = session.q[0];
+  const it = items.find(x => x.id === id);
+  if (!it) {
+    if (session.q.length) { session.q.shift(); return renderReview(); }
+    box.innerHTML = items.length
+      ? `<p class="big">오늘 복습 끝</p><p class="muted">새 문장을 추가하거나 쉐도잉으로 귀를 풀어 보세요.</p>`
+      : `<p class="big">문장이 없습니다</p><p class="muted">[추가] 탭에서 문장을 넣거나 [설정] 탭의 '예문 넣기'를 누르세요.</p>`;
+    return;
+  }
+  const ja = it.lang === 'ja' ? ' ja' : '';
+  const listenMode = S.mode === 'listen';
+  let prompt;
+  if (session.revealed) {
+    prompt = `<div class="big${ja}">${esc(it.text)}</div>
+      ${it.lang === 'ja' && it.reading ? `<div class="reading ja">${esc(it.reading)}</div>` : ''}
+      <div style="margin-top:8px">${esc(it.meaning)}</div>
+      ${it.note ? `<div class="muted" style="margin-top:6px">${esc(it.note)}</div>` : ''}`;
+  } else if (listenMode) {
+    prompt = `<div class="muted">소리를 듣고 뜻과 문장을 떠올려 보세요</div>`;
+  } else {
+    prompt = `<div class="big">${esc(it.meaning || '(뜻 없음)')}</div>
+      <div class="muted" style="margin-top:6px">${it.lang === 'ja' ? '일본어' : '영어'}로 말해 보세요</div>`;
+  }
+  let said = '';
+  if (session.said) {
+    const s = session.said;
+    said = `<div class="score">${s.error ? esc(s.error) : `일치도 <b>${s.score}%</b><br><span class="muted">들린 말: ${esc(s.text || '(없음)')}</span>`}</div>`;
+  }
+  box.innerHTML = `
+    <div class="muted" style="margin-bottom:6px"><span class="tag">${it.lang === 'ja' ? '日本語' : 'EN'}</span>남은 문장 ${session.q.length}</div>
+    <div class="prompt">${prompt}</div>
+    ${said}
+    <div class="row" style="margin-top:12px">
+      <button class="grow" data-a="play">듣기</button>
+      <button class="grow" data-a="slow">느리게</button>
+      <button class="grow" data-a="rec" ${Rec ? '' : 'disabled'}>말해 보기</button>
+    </div>
+    ${session.revealed
+      ? `<div class="grades">${GRADES.map((g, i) => `<button class="g${i}" data-g="${i}">${g[0]}<small>${preview(it, i)}</small></button>`).join('')}</div>`
+      : `<button class="primary" data-a="reveal" style="width:100%;margin-top:10px">정답 보기</button>`}`;
+  box.onclick = async e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.a === 'play') play(it);
+    if (b.dataset.a === 'slow') play(it, 0.7);
+    if (b.dataset.a === 'reveal') { session.revealed = true; renderReview(); play(it); }
+    if (b.dataset.a === 'rec') {
+      b.textContent = '듣는 중...'; b.disabled = true;
+      try {
+        const alts = await listen(it.lang);
+        const targets = [it.text, it.reading].filter(Boolean);
+        let best = { score: 0, text: alts[0] || '' };
+        for (const a of alts) for (const t of targets) {
+          const sc = similarity(t, a, it.lang);
+          if (sc > best.score) best = { score: sc, text: a };
+        }
+        session.said = best;
+      } catch (err) { session.said = { error: '음성 인식 실패: ' + err.message }; }
+      renderReview();
+    }
+    if (b.dataset.g !== undefined) {
+      const g = +b.dataset.g;
+      put(schedule(it, g));
+      session.q.shift();
+      if (g === 0) session.q.push(it.id);
+      session.done++; session.revealed = false; session.said = null;
+      renderReview();
+      if (S.mode === 'listen' && session.q.length) {
+        const nx = items.find(x => x.id === session.q[0]); if (nx) play(nx);
+      }
+    }
+  };
+}
+
+// ---------- 쉐도잉 ----------
+let shLang = 'en', shRun = 0;
+const wait = ms => new Promise(r => setTimeout(r, ms));
+async function shadow() {
+  const run = ++shRun;
+  const t = today();
+  let list = items.filter(it => it.lang === shLang);
+  const scope = $('#shScope').value;
+  if (scope === 'due') list = list.filter(it => !it.due || it.due <= t);
+  if (scope === 'recent') list = list.slice().sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 20);
+  if (!list.length) { toast('재생할 문장이 없습니다'); return; }
+  const rep = +$('#shRepeat').value, showMeaning = $('#shMeaning').checked;
+  $('#shStart').disabled = true; $('#shStop').disabled = false;
+  for (let i = 0; i < list.length && run === shRun; i++) {
+    const it = list[i], ja = it.lang === 'ja' ? ' ja' : '';
+    const show = full => $('#shNow').innerHTML = `<div class="muted">${i + 1} / ${list.length}</div>
+      ${full ? `<div class="big${ja}">${esc(it.text)}</div>${ja && it.reading ? `<div class="reading ja">${esc(it.reading)}</div>` : ''}` : ''}
+      <div style="margin-top:6px">${esc(it.meaning)}</div>`;
+    if (showMeaning) { show(false); await wait(1500); if (run !== shRun) break; }
+    show(true);
+    for (let k = 0; k < rep && run === shRun; k++) {
+      const t0 = Date.now();
+      await play(it);
+      await wait(Math.max(1500, (Date.now() - t0) * 1.2 + 600));
+    }
+  }
+  if (run === shRun) $('#shNow').innerHTML = '<span class="muted">끝</span>';
+  $('#shStart').disabled = false; $('#shStop').disabled = true;
+}
+
+// ---------- 목록 ----------
+function renderList() {
+  const q = $('#q').value.trim().toLowerCase(), l = $('#listLang').value;
+  const list = items.filter(it => inLang(it, l) &&
+    (!q || [it.text, it.reading, it.meaning, it.note, it.tags].join(' ').toLowerCase().includes(q)))
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  $('#list').innerHTML = list.length ? list.map(it => `
+    <div class="item" data-id="${esc(it.id)}">
+      <div class="grow">
+        <div class="t${it.lang === 'ja' ? ' ja' : ''}">${esc(it.text)}</div>
+        ${it.reading ? `<div class="reading ja" style="font-size:14px">${esc(it.reading)}</div>` : ''}
+        <div class="muted">${esc(it.meaning)}</div>
+        <div><span class="tag">${it.lang === 'ja' ? '日本語' : 'EN'}</span><span class="tag">다음 ${esc(it.due || '오늘')}</span>${String(it.tags || '').split(',').filter(s => s.trim()).map(s => `<span class="tag">${esc(s.trim())}</span>`).join('')}</div>
+      </div>
+      <div class="row" style="flex-direction:column;gap:4px">
+        <button data-a="play">듣기</button><button data-a="edit">수정</button>
+      </div>
+    </div>`).join('') : '<p class="muted">문장이 없습니다</p>';
+}
+$('#list').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const it = items.find(x => x.id === b.closest('.item').dataset.id); if (!it) return;
+  if (b.dataset.a === 'play') play(it);
+  if (b.dataset.a === 'edit') { fillForm(it); show('add'); }
+};
+$('#q').oninput = renderList; $('#listLang').onchange = renderList;
+
+// ---------- 추가 / 수정 ----------
+let fLang = 'en', bLang = 'en';
+function segInit(sel, get, set) {
+  const seg = $(sel);
+  const paint = () => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.lang || b.dataset.mode) === get()));
+  seg.onclick = e => { const b = e.target.closest('button'); if (!b) return; set(b.dataset.lang || b.dataset.mode); paint(); };
+  paint(); return paint;
+}
+const paintF = segInit('#fLangSeg', () => fLang, v => { fLang = v; formLang(); });
+segInit('#bLangSeg', () => bLang, v => bLang = v);
+function formLang() {
+  $('#fReading').classList.toggle('hidden', fLang !== 'ja');
+  $('#fReadingLabel').classList.toggle('hidden', fLang !== 'ja');
+  $('#fText').classList.toggle('ja', fLang === 'ja');
+}
+function fillForm(it) {
+  $('#fId').value = it ? it.id : '';
+  fLang = it ? it.lang : fLang; paintF(); formLang();
+  $('#fText').value = it ? it.text : ''; $('#fReading').value = it ? it.reading || '' : '';
+  $('#fMeaning').value = it ? it.meaning || '' : ''; $('#fNote').value = it ? it.note || '' : '';
+  $('#fTags').value = it ? it.tags || '' : '';
+  $('#addTitle').textContent = it ? '문장 수정' : '문장 추가';
+  $('#fCancel').classList.toggle('hidden', !it);
+  $('#fCancel').textContent = it ? '삭제' : '취소';
+}
+const newItem = o => Object.assign({ id: uid(), ease: 2.5, interval: 0, reps: 0, due: today(), lastReviewed: '', createdAt: new Date().toISOString(), reading: '', note: '', tags: '' }, o);
+$('#fSave').onclick = () => {
+  const text = $('#fText').value.trim(); if (!text) return toast('문장을 입력하세요');
+  const data = { lang: fLang, text, reading: fLang === 'ja' ? $('#fReading').value.trim() : '',
+    meaning: $('#fMeaning').value.trim(), note: $('#fNote').value.trim(), tags: $('#fTags').value.trim() };
+  const id = $('#fId').value;
+  const old = items.find(x => x.id === id);
+  put(old ? Object.assign({}, old, data) : newItem(data));
+  toast(old ? '수정했습니다' : '추가했습니다');
+  fillForm(null); session = null;
+};
+$('#fCancel').onclick = () => {
+  const id = $('#fId').value;
+  if (id && confirm('이 문장을 삭제할까요?')) { del(id); toast('삭제했습니다'); session = null; }
+  fillForm(null);
+};
+$('#fPlay').onclick = () => {
+  const t = (fLang === 'ja' && S.useReading && $('#fReading').value.trim()) || $('#fText').value.trim();
+  if (t) speak(t, fLang);
+};
+function importLines(lang, text) {
+  let n = 0;
+  text.split(/\r?\n/).forEach(line => {
+    if (!line.trim()) return;
+    const c = (line.includes('\t') ? line.split('\t') : line.split('|')).map(s => s.trim());
+    const o = lang === 'ja'
+      ? { lang, text: c[0], reading: c[1] || '', meaning: c[2] || '', note: c[3] || '' }
+      : { lang, text: c[0], meaning: c[1] || '', note: c[2] || '' };
+    if (!o.text) return;
+    const it = newItem(o); items.push(it); queue.upsert[it.id] = it; n++;
+  });
+  saveLocal(); flush().catch(() => {});
+  return n;
+}
+$('#bSave').onclick = () => {
+  const n = importLines(bLang, $('#bText').value);
+  $('#bText').value = ''; session = null; toast(n + '개 가져왔습니다');
+};
+
+// ---------- 설정 ----------
+function renderSettings() {
+  $('#sUrl').value = S.url; $('#sToken').value = S.token;
+  $('#rEn').value = S.rate.en; $('#rJa').value = S.rate.ja;
+  $('#rEnV').textContent = S.rate.en + 'x'; $('#rJaV').textContent = S.rate.ja + 'x';
+  $('#useReading').checked = S.useReading;
+}
+$('#vEn').onchange = e => { S.voice.en = e.target.value; saveSettings(); };
+$('#vJa').onchange = e => { S.voice.ja = e.target.value; saveSettings(); };
+$('#rEn').oninput = e => { S.rate.en = +e.target.value; $('#rEnV').textContent = S.rate.en + 'x'; saveSettings(); };
+$('#rJa').oninput = e => { S.rate.ja = +e.target.value; $('#rJaV').textContent = S.rate.ja + 'x'; saveSettings(); };
+$('#useReading').onchange = e => { S.useReading = e.target.checked; saveSettings(); };
+$('#testEn').onclick = () => speak('Could you say that again, please?', 'en');
+$('#testJa').onclick = () => speak('今日はとても暑いですね。', 'ja');
+$('#sSave').onclick = () => {
+  S.url = $('#sUrl').value.trim(); S.token = $('#sToken').value.trim(); saveSettings();
+  // 시트를 처음 연결할 때 이 기기에만 있던 문장을 올린다
+  items.forEach(it => { queue.upsert[it.id] = it; }); saveLocal();
+  sync(true);
+};
+$('#exportBtn').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' }));
+  a.download = 'sentences-' + today() + '.json'; a.click();
+};
+$('#sampleBtn').onclick = () => {
+  const n = importLines('en', [
+    'Could you say that again, please? | 다시 한 번 말씀해 주시겠어요? | Could you ~? 공손한 부탁',
+    "I'm just looking around. | 그냥 둘러보는 중이에요. | 가게에서 점원이 말을 걸 때",
+    'What do you do for a living? | 무슨 일 하세요? | 직업을 묻는 자연스러운 표현',
+    "It's not a big deal. | 별일 아니에요. | big deal = 큰일",
+    "I'll get back to you on that. | 그건 확인하고 다시 알려 드릴게요. | get back to someone = 나중에 답하다",
+  ].join('\n'));
+  const m = importLines('ja', [
+    'これはいくらですか。 | これはいくらですか。 | 이거 얼마예요? | いくら = 얼마',
+    'すみません、駅はどこですか。 | すみません、えきはどこですか。 | 실례합니다, 역은 어디예요? | 駅(えき) = 역',
+    '今日はとても暑いですね。 | きょうはとてもあついですね。 | 오늘 정말 덥네요. | ～ですね = 상대에게 동의를 구하는 말투',
+    'もう一度言ってください。 | もういちどいってください。 | 한 번 더 말해 주세요. | ～てください = ～해 주세요',
+    '日本語を勉強しています。 | にほんごをべんきょうしています。 | 일본어를 공부하고 있어요. | ～ています = 진행, 상태',
+  ].join('\n'));
+  session = null; toast((n + m) + '개 예문을 넣었습니다');
+};
+
+// ---------- 화면 전환 ----------
+const views = ['review', 'shadow', 'list', 'add', 'set'];
+function show(v) {
+  views.forEach(x => $('#v-' + x).classList.toggle('hidden', x !== v));
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  if (v !== 'shadow') { shRun++; if (synth) synth.cancel(); }
+  if (v === 'review') { session = null; renderReview(); }
+  if (v === 'list') renderList();
+  if (v === 'set') renderSettings();
+  window.scrollTo(0, 0);
+}
+$('#nav').onclick = e => { const b = e.target.closest('button'); if (b) show(b.dataset.v); };
+function renderAll() { session = null; renderReview(); renderList(); }
+
+segInit('#langSeg', () => S.lang, v => { S.lang = v; saveSettings(); session = null; renderReview(); });
+segInit('#modeSeg', () => S.mode, v => { S.mode = v; saveSettings(); renderReview(); });
+segInit('#shLangSeg', () => shLang, v => shLang = v);
+$('#shStart').onclick = shadow;
+$('#shStop').onclick = () => { shRun++; if (synth) synth.cancel(); $('#shStart').disabled = false; $('#shStop').disabled = true; };
+
+fillForm(null);
+renderReview();
+sync(false);
+})();
+</script>
+</body>
+</html>
