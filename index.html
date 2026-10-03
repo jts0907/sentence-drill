@@ -191,6 +191,7 @@ input[type=checkbox] { width: auto; }
   <div class="card row">
     <button class="grow" id="exportBtn">백업 파일 받기</button>
     <button class="grow" id="sampleBtn">예문 넣기</button>
+    <button class="grow" id="dedupeBtn">중복 정리</button>
   </div>
 </section>
 
@@ -594,15 +595,18 @@ $('#fPlay').onclick = () => {
   const t = (fLang === 'ja' && S.useReading && $('#fReading').value.trim()) || $('#fText').value.trim();
   if (t) speak(t, fLang);
 };
+const keyOf = it => it.lang + '|' + String(it.text).trim().toLowerCase();
 function importLines(lang, text) {
   let n = 0;
+  const seen = new Set(items.map(keyOf));
   text.split(/\r?\n/).forEach(line => {
     if (!line.trim()) return;
     const c = (line.includes('\t') ? line.split('\t') : line.split('|')).map(s => s.trim());
     const o = lang === 'ja'
       ? { lang, text: c[0], reading: c[1] || '', meaning: c[2] || '', note: c[3] || '' }
       : { lang, text: c[0], meaning: c[1] || '', note: c[2] || '' };
-    if (!o.text) return;
+    if (!o.text || seen.has(keyOf(o))) return;
+    seen.add(keyOf(o));
     const it = newItem(o); items.push(it); queue.upsert[it.id] = it; n++;
   });
   saveLocal(); flush().catch(() => {});
@@ -610,7 +614,7 @@ function importLines(lang, text) {
 }
 $('#bSave').onclick = () => {
   const n = importLines(bLang, $('#bText').value);
-  $('#bText').value = ''; session = null; toast(n + '개 가져왔습니다');
+  $('#bText').value = ''; session = null; toast(n + '개 가져왔습니다 (이미 있는 문장은 건너뜀)');
 };
 
 // ---------- 설정 ----------
@@ -638,6 +642,23 @@ $('#exportBtn').onclick = () => {
   a.href = URL.createObjectURL(new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' }));
   a.download = 'sentences-' + today() + '.json'; a.click();
 };
+// 같은 언어, 같은 문장이 여러 개면 복습을 가장 많이 한 것 하나만 남긴다
+$('#dedupeBtn').onclick = () => {
+  const best = {};
+  items.forEach(it => {
+    const k = keyOf(it), b = best[k];
+    if (!b || (Number(it.reps) || 0) > (Number(b.reps) || 0) ||
+        ((Number(it.reps) || 0) === (Number(b.reps) || 0) && (it.lastReviewed || '') > (b.lastReviewed || ''))) best[k] = it;
+  });
+  const keep = new Set(Object.values(best).map(it => it.id));
+  const drop = items.filter(it => !keep.has(it.id));
+  if (!drop.length) return toast('중복된 문장이 없습니다');
+  if (!confirm(drop.length + '개 중복 문장을 지울까요?')) return;
+  items = items.filter(it => keep.has(it.id));
+  drop.forEach(it => { delete queue.upsert[it.id]; queue.del.push(it.id); });
+  saveLocal(); flush().catch(() => {}); session = null;
+  toast(drop.length + '개 정리했습니다');
+};
 $('#sampleBtn').onclick = () => {
   const n = importLines('en', [
     'Could you say that again, please? | 다시 한 번 말씀해 주시겠어요? | Could you ~? 공손한 부탁',
@@ -653,7 +674,7 @@ $('#sampleBtn').onclick = () => {
     'もう一度言ってください。 | もういちどいってください。 | 한 번 더 말해 주세요. | ～てください = ～해 주세요',
     '日本語を勉強しています。 | にほんごをべんきょうしています。 | 일본어를 공부하고 있어요. | ～ています = 진행, 상태',
   ].join('\n'));
-  session = null; toast((n + m) + '개 예문을 넣었습니다');
+  session = null; toast(n + m ? (n + m) + '개 예문을 넣었습니다' : '예문이 이미 들어 있습니다');
 };
 
 // ---------- 화면 전환 ----------
